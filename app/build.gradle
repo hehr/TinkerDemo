@@ -1,0 +1,135 @@
+apply plugin: 'com.android.application'
+apply plugin: 'com.tencent.tinker.patch'
+
+def bakPath = file("${buildDir}/tinkerFile/") //补丁包存放位置
+
+ext {
+    tinkerEnabled = true
+    tinkerOldApkPath = "${bakPath}/app-debug-1114-14-20-32.apk"
+    tinkerApplyMappingPath = "${bakPath}/"
+    tinkerApplyResourcePath = "${bakPath}/app-debug-1103-18-13-12-R.txt"
+}
+
+def getOldApkPath() {
+    return ext.tinkerOldApkPath
+}
+def getApplyMappingPath() {
+    return ext.tinkerApplyMappingPath
+}
+def getApplyResourceMappingPath() {
+    return  ext.tinkerApplyResourcePath
+}
+
+if (ext.tinkerEnabled) {
+    tinkerPatch {
+        oldApk = getOldApkPath()
+        ignoreWarning = false
+        useSign = true
+
+        packageConfig {
+            configField("patchMessage", "tinker is sample to use")
+            configField("platform", "all")
+        }
+
+        lib {
+            pattern = ["lib/armeabi/*.so"]
+        }
+
+        res {
+            pattern = ["res/*", "assets/*", "resources.arsc", "AndroidManifest.xml"]
+            ignoreChange = ["assets/sample_meta.txt"]
+            largeModSize = 100
+        }
+
+        sevenZip {
+            zipArtifact = "com.tencent.mm:SevenZip:1.1.10"
+        }
+
+        dex {
+
+            dexMode = "jar"
+            pattern = ["classes*.dex",
+                       "assets/secondary-dex-?.jar"]
+            loader = ["com.tencent.tinker.loader.*",
+                      "com.tencent.tinker.*",
+                      "com.example.administrator.tinker_test.MyApplication"
+            ]
+        }
+
+        buildConfig{
+            tinkerId = "1.0"
+            applyMapping = getApplyMappingPath()
+            applyResourceMapping = getApplyResourceMappingPath()
+        }
+    }
+}
+
+
+android {
+    compileSdkVersion 23
+    buildToolsVersion "23.0.3"
+
+    defaultConfig {
+        applicationId "test.hehr.org.tinkerdemo"
+        minSdkVersion 15
+        targetSdkVersion 23
+        versionCode 1
+        versionName "1.0"
+
+    }
+
+
+    buildTypes {
+        release {
+            minifyEnabled false
+            proguardFiles getDefaultProguardFile('proguard-android.txt'), 'proguard-rules.pro'
+        }
+    }
+
+}
+
+android.applicationVariants.all { variant ->
+    /**
+     * task type, you want to bak
+     */
+    def taskName = variant.name
+
+    tasks.all {
+        if ("assemble${taskName.capitalize()}".equalsIgnoreCase(it.name)) {
+            it.doLast {
+                copy {
+                    def date = new Date().format("MMdd-HH-mm-ss")
+                    from "${buildDir}/outputs/apk/${project.getName()}-${taskName}.apk"
+                    into bakPath
+                    rename { String fileName ->
+                        fileName.replace("${project.getName()}-${taskName}.apk", "${project.getName()}-${taskName}-${date}.apk")
+                    }
+
+                    from "${buildDir}/outputs/mapping/${taskName}/mapping.txt"
+                    into bakPath
+                    rename { String fileName ->
+                        fileName.replace("mapping.txt", "${project.getName()}-${taskName}-${date}-mapping.txt")
+                    }
+
+                    from "${buildDir}/intermediates/symbols/${taskName}/R.txt"
+                    into bakPath
+                    rename { String fileName ->
+                        fileName.replace("R.txt", "${project.getName()}-${taskName}-${date}-R.txt")
+                    }
+                }
+            }
+        }
+    }
+}
+
+dependencies {
+    compile fileTree(dir: 'libs', include: ['*.jar'])
+    testCompile 'junit:junit:4.12'
+    compile 'com.android.support:appcompat-v7:23.3.0'
+    compile "com.android.support:multidex:1.0.1"
+    compile('com.tencent.tinker:tinker-android-anno:1.7.1') //可选，用于生成application类
+    compile('com.tencent.tinker:tinker-android-lib:1.7.1') //tinker的核心库
+//    compile('com.android.support:multidex:1.0.1')
+}
+
+
